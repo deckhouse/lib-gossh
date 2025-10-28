@@ -8,14 +8,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 	"sync/atomic"
 )
-
-// debugMux, if set, causes messages in the connection protocol to be
-// logged.
-const debugMux = false
 
 // chanList is a thread safe channel list.
 type chanList struct {
@@ -97,6 +92,11 @@ type mux struct {
 
 	errCond *sync.Cond
 	err     error
+
+	// debugMux, if set, causes messages in the connection protocol to be
+	// logged.
+	debugMux bool
+	logger   Logger
 }
 
 // When debugging, each new chanList instantiation has a different
@@ -113,7 +113,7 @@ func (m *mux) Wait() error {
 }
 
 // newMux returns a mux that runs over the given connection.
-func newMux(p packetConn) *mux {
+func newMux(p packetConn, debugMux bool) *mux {
 	m := &mux{
 		conn:             p,
 		incomingChannels: make(chan NewChannel, chanSize),
@@ -121,18 +121,22 @@ func newMux(p packetConn) *mux {
 		incomingRequests: make(chan *Request, chanSize),
 		errCond:          newCond(),
 	}
-	if debugMux {
-		m.chanList.offset = atomic.AddUint32(&globalOff, 1)
-	}
 
 	go m.loop()
 	return m
 }
 
+func (m *mux) EnableDebug() {
+	if !m.debugMux {
+		m.debugMux = true
+		m.chanList.offset = atomic.AddUint32(&globalOff, 1)
+	}
+}
+
 func (m *mux) sendMessage(msg interface{}) error {
 	p := Marshal(msg)
-	if debugMux {
-		log.Printf("send global(%d): %#v", m.chanList.offset, msg)
+	if m.debugMux {
+		m.logger.Debug(fmt.Sprintf("send global(%d): %#v", m.chanList.offset, msg))
 	}
 	return m.conn.writePacket(p)
 }
@@ -205,8 +209,8 @@ func (m *mux) loop() {
 	m.errCond.Broadcast()
 	m.errCond.L.Unlock()
 
-	if debugMux {
-		log.Println("loop exit", err)
+	if m.debugMux {
+		m.logger.Debug("loop exit", err)
 	}
 }
 
@@ -217,12 +221,12 @@ func (m *mux) onePacket() error {
 		return err
 	}
 
-	if debugMux {
+	if m.debugMux {
 		if packet[0] == msgChannelData || packet[0] == msgChannelExtendedData {
-			log.Printf("decoding(%d): data packet - %d bytes", m.chanList.offset, len(packet))
+			m.logger.Debug(fmt.Sprintf("decoding(%d): data packet - %d bytes", m.chanList.offset, len(packet)))
 		} else {
 			p, _ := decode(packet)
-			log.Printf("decoding(%d): %d %#v - %d bytes", m.chanList.offset, packet[0], p, len(packet))
+			m.logger.Debug(fmt.Sprintf("decoding(%d): %d %#v - %d bytes", m.chanList.offset, packet[0], p, len(packet)))
 		}
 	}
 

@@ -352,7 +352,7 @@ func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	if err != nil {
 		return nil, err
 	}
-	s.mux = newMux(s.transport)
+	s.mux = newMux(s.transport, s.debugMux)
 	return perms, err
 }
 

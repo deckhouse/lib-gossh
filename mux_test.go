@@ -15,8 +15,8 @@ import (
 func muxPair() (*mux, *mux) {
 	a, b := memPipe()
 
-	s := newMux(a)
-	c := newMux(b)
+	s := newMux(a, false)
+	c := newMux(b, false)
 
 	return s, c
 }
@@ -353,7 +353,7 @@ func TestMuxChannelRequest(t *testing.T) {
 
 func TestMuxUnknownChannelRequests(t *testing.T) {
 	clientPipe, serverPipe := memPipe()
-	client := newMux(clientPipe)
+	client := newMux(clientPipe, false)
 	defer serverPipe.Close()
 	defer client.Close()
 
@@ -451,7 +451,7 @@ func TestMuxUnknownChannelRequests(t *testing.T) {
 
 func TestMuxClosedChannel(t *testing.T) {
 	clientPipe, serverPipe := memPipe()
-	client := newMux(clientPipe)
+	client := newMux(clientPipe, false)
 	defer serverPipe.Close()
 	defer client.Close()
 
@@ -827,9 +827,9 @@ func TestMuxChannelWindowDeferredUpdates(t *testing.T) {
 
 // Don't ship code with debug=true.
 func TestDebug(t *testing.T) {
-	if debugMux {
-		t.Error("mux debug switched on")
-	}
+	// if debugMux {
+	// 	t.Error("mux debug switched on")
+	// }
 	if debugHandshake {
 		t.Error("handshake debug switched on")
 	}

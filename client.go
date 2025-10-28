@@ -84,8 +84,14 @@ func NewClientConn(c net.Conn, addr string, config *ClientConfig) (Conn, <-chan 
 		c.Close()
 		return nil, nil, nil, fmt.Errorf("ssh: handshake failed: %w", err)
 	}
-	conn.mux = newMux(conn.transport)
+	conn.mux = newMux(conn.transport, false)
+	conn.mux.logger = NewSlogLogger(nil)
 	return conn, conn.mux.incomingChannels, conn.mux.incomingRequests, nil
+}
+
+func (c *connection) EnableDebug() {
+	c.debugMux = true
+	c.mux.EnableDebug()
 }
 
 // clientHandshake performs the client side key exchange. See RFC 4253 Section
