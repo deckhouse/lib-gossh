@@ -122,6 +122,11 @@ func newMux(p packetConn, debugMux bool) *mux {
 		errCond:          newCond(),
 	}
 
+	if debugMux {
+		m.debugMux = true
+		m.chanList.offset = atomic.AddUint32(&globalOff, 1)
+	}
+
 	go m.loop()
 	return m
 }

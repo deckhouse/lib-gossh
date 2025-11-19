@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"slices"
 	"strings"
@@ -18,7 +17,7 @@ import (
 // debugHandshake, if set, prints messages sent and received.  Key
 // exchange messages are printed as if DH were used, so the debug
 // messages are wrong when using ECDH.
-const debugHandshake = false
+// const debugHandshake = false
 
 // chanSize sets the amount of buffering SSH connections. This is
 // primarily for testing: setting chanSize=0 uncovers deadlocks more
@@ -128,6 +127,13 @@ type handshakeTransport struct {
 	// strictMode indicates if the other side of the handshake indicated
 	// that we should be following the strict KEX protocol restrictions.
 	strictMode bool
+
+	// debugHandshake, if set, prints messages sent and received.  Key
+	// exchange messages are printed as if DH were used, so the debug
+	// messages are wrong when using ECDH.
+	debugHandshake bool
+
+	logger Logger
 }
 
 type pendingKex struct {
@@ -156,7 +162,7 @@ func newHandshakeTransport(conn keyingTransport, config *Config, clientVersion, 
 	return t
 }
 
-func newClientTransport(conn keyingTransport, clientVersion, serverVersion []byte, config *ClientConfig, dialAddr string, addr net.Addr) *handshakeTransport {
+func newClientTransport(conn keyingTransport, clientVersion, serverVersion []byte, config *ClientConfig, dialAddr string, addr net.Addr, debug bool) *handshakeTransport {
 	t := newHandshakeTransport(conn, &config.Config, clientVersion, serverVersion)
 	t.dialAddress = dialAddr
 	t.remoteAddr = addr
@@ -166,6 +172,9 @@ func newClientTransport(conn keyingTransport, clientVersion, serverVersion []byt
 		t.hostKeyAlgorithms = config.HostKeyAlgorithms
 	} else {
 		t.hostKeyAlgorithms = defaultHostKeyAlgos
+	}
+	if debug {
+		t.debugHandshake = true
 	}
 	go t.readLoop()
 	go t.kexLoop()
@@ -217,10 +226,10 @@ func (t *handshakeTransport) printPacket(p []byte, write bool) {
 	}
 
 	if p[0] == msgChannelData || p[0] == msgChannelExtendedData {
-		log.Printf("%s %s data (packet %d bytes)", t.id(), action, len(p))
+		t.logger.Debug(fmt.Sprintf("%s %s data (packet %d bytes)", t.id(), action, len(p)))
 	} else {
 		msg, err := decode(p)
-		log.Printf("%s %s %T %v (%v)", t.id(), action, msg, msg, err)
+		t.logger.Debug(fmt.Sprintf("%s %s %T %v (%v)", t.id(), action, msg, msg, err))
 	}
 }
 
@@ -261,7 +270,7 @@ func (t *handshakeTransport) readLoop() {
 }
 
 func (t *handshakeTransport) pushPacket(p []byte) error {
-	if debugHandshake {
+	if t.debugHandshake {
 		t.printPacket(p, true)
 	}
 	return t.conn.writePacket(p)
@@ -436,7 +445,7 @@ func (t *handshakeTransport) readOnePacket(first bool) ([]byte, error) {
 		t.requestKeyExchange()
 	}
 
-	if debugHandshake {
+	if t.debugHandshake {
 		t.printPacket(p, false)
 	}
 
@@ -457,8 +466,8 @@ func (t *handshakeTransport) readOnePacket(first bool) ([]byte, error) {
 	t.startKex <- &kex
 	err = <-kex.done
 
-	if debugHandshake {
-		log.Printf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err)
+	if t.debugHandshake {
+		t.logger.Debug(fmt.Sprintf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err))
 	}
 
 	if err != nil {
@@ -648,8 +657,8 @@ func (t *handshakeTransport) Close() error {
 }
 
 func (t *handshakeTransport) enterKeyExchange(otherInitPacket []byte) error {
-	if debugHandshake {
-		log.Printf("%s entered key exchange", t.id())
+	if t.debugHandshake {
+		t.logger.Debug(fmt.Sprintf("%s entered key exchange", t.id()))
 	}
 
 	otherInit := &kexInitMsg{}
