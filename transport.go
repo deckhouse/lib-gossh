@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 )
 
 // debugTransport if set, will print packet types as they go over the
@@ -50,7 +51,7 @@ type transport struct {
 	// wire. No message decoding is done, to minimize the impact on timing.
 	debugTransport bool
 
-	logger Logger
+	logger *slog.Logger
 }
 
 // packetCipher represents a combination of SSH encryption/MAC

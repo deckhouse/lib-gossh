@@ -6,6 +6,7 @@ package ssh
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 )
 
@@ -69,7 +70,7 @@ type Conn interface {
 	// error causing the shutdown.
 	Wait() error
 
-	SetLogger(l Logger)
+	SetLogger(l *slog.Logger)
 
 	// TODO(hanwen): consider exposing:
 	//   RequestKeyChange
@@ -108,7 +109,7 @@ func (c *connection) Close() error {
 	return c.sshConn.conn.Close()
 }
 
-func (c *connection) SetLogger(l Logger) {
+func (c *connection) SetLogger(l *slog.Logger) {
 	if l != nil {
 		c.logger = l
 	}

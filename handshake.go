@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"slices"
 	"strings"
@@ -133,7 +134,7 @@ type handshakeTransport struct {
 	// messages are wrong when using ECDH.
 	debugHandshake bool
 
-	logger Logger
+	logger *slog.Logger
 }
 
 type pendingKex struct {

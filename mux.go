@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 )
@@ -96,7 +97,7 @@ type mux struct {
 	// debugMux, if set, causes messages in the connection protocol to be
 	// logged.
 	debugMux bool
-	logger   Logger
+	logger   *slog.Logger
 }
 
 // When debugging, each new chanList instantiation has a different

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"sync"
@@ -92,7 +93,7 @@ func NewClientConn(c net.Conn, addr string, config *ClientConfig) (Conn, <-chan 
 // as the underlying transport.  The Request and NewChannel channels
 // must be serviced or the connection will hang.
 // All debug variables will be set to true
-func NewClientConnWithDebug(c net.Conn, addr string, config *ClientConfig, l Logger) (Conn, <-chan NewChannel, <-chan *Request, error) {
+func NewClientConnWithDebug(c net.Conn, addr string, config *ClientConfig, l *slog.Logger) (Conn, <-chan NewChannel, <-chan *Request, error) {
 	fullConf := *config
 	fullConf.SetDefaults()
 	if fullConf.HostKeyCallback == nil {
@@ -116,7 +117,7 @@ func NewClientConnWithDebug(c net.Conn, addr string, config *ClientConfig, l Log
 func (c *connection) EnableDebug() {
 	c.debugMux = true
 	if c.mux.logger == nil {
-		c.mux.logger = NewSlogLogger(nil)
+		c.mux.logger = slog.Default()
 	}
 	c.mux.EnableDebug()
 }
