@@ -318,7 +318,7 @@ func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 		return nil, err
 	}
 
-	tr := newTransport(s.sshConn.conn, config.Rand, false /* not client */)
+	tr := newTransport(s.sshConn.conn, config.Rand, false /* not client */, false)
 	s.transport = newServerTransport(tr, s.clientVersion, s.serverVersion, config)
 
 	if err := s.transport.waitSession(); err != nil {
@@ -352,7 +352,7 @@ func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	if err != nil {
 		return nil, err
 	}
-	s.mux = newMux(s.transport)
+	s.mux = newMux(s.transport, s.debugMux)
 	return perms, err
 }
 

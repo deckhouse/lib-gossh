@@ -112,8 +112,8 @@ func TestMaxAuthTriesNoneMethod(t *testing.T) {
 		t.Fatalf("unable to exchange version: %v", err)
 	}
 	c.transport = newClientTransport(
-		newTransport(c.sshConn.conn, clientConfig.Rand, true /* is client */),
-		c.clientVersion, c.serverVersion, &clientConfig, "", c.sshConn.RemoteAddr())
+		newTransport(c.sshConn.conn, clientConfig.Rand, true /* is client */, false),
+		c.clientVersion, c.serverVersion, &clientConfig, "", c.sshConn.RemoteAddr(), false)
 	if err := c.transport.waitSession(); err != nil {
 		t.Fatalf("unable to wait session: %v", err)
 	}

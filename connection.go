@@ -6,6 +6,7 @@ package ssh
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 )
 
@@ -69,6 +70,8 @@ type Conn interface {
 	// error causing the shutdown.
 	Wait() error
 
+	SetLogger(l *slog.Logger)
+
 	// TODO(hanwen): consider exposing:
 	//   RequestKeyChange
 	//   Disconnect
@@ -98,10 +101,18 @@ type connection struct {
 
 	// The connection protocol.
 	*mux
+
+	debugMux bool
 }
 
 func (c *connection) Close() error {
 	return c.sshConn.conn.Close()
+}
+
+func (c *connection) SetLogger(l *slog.Logger) {
+	if l != nil {
+		c.logger = l
+	}
 }
 
 // sshConn provides net.Conn metadata, but disallows direct reads and

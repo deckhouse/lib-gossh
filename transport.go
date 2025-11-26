@@ -10,12 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 )
 
 // debugTransport if set, will print packet types as they go over the
 // wire. No message decoding is done, to minimize the impact on timing.
-const debugTransport = false
+// const debugTransport = false
 
 // packetConn represents a transport that implements packet based
 // operations.
@@ -46,6 +46,12 @@ type transport struct {
 
 	strictMode     bool
 	initialKEXDone bool
+
+	// debugTransport if set, will print packet types as they go over the
+	// wire. No message decoding is done, to minimize the impact on timing.
+	debugTransport bool
+
+	logger *slog.Logger
 }
 
 // packetCipher represents a combination of SSH encryption/MAC
@@ -115,7 +121,7 @@ func (t *transport) printPacket(p []byte, write bool) {
 		what = "write"
 	}
 
-	log.Println(what, who, p[0])
+	t.logger.Debug(what, who, p[0])
 }
 
 // Read and decrypt next packet.
@@ -130,7 +136,7 @@ func (t *transport) readPacket() (p []byte, err error) {
 			break
 		}
 	}
-	if debugTransport {
+	if t.debugTransport {
 		t.printPacket(p, false)
 	}
 
@@ -180,7 +186,7 @@ func (s *connectionState) readPacket(r *bufio.Reader, strictMode bool) ([]byte, 
 }
 
 func (t *transport) writePacket(packet []byte) error {
-	if debugTransport {
+	if t.debugTransport {
 		t.printPacket(packet, true)
 	}
 	return t.writer.writePacket(t.bufWriter, t.rand, packet, t.strictMode)
@@ -211,7 +217,7 @@ func (s *connectionState) writePacket(w *bufio.Writer, rand io.Reader, packet []
 	return err
 }
 
-func newTransport(rwc io.ReadWriteCloser, rand io.Reader, isClient bool) *transport {
+func newTransport(rwc io.ReadWriteCloser, rand io.Reader, isClient bool, debug bool) *transport {
 	t := &transport{
 		bufReader: bufio.NewReader(rwc),
 		bufWriter: bufio.NewWriter(rwc),
@@ -234,6 +240,9 @@ func newTransport(rwc io.ReadWriteCloser, rand io.Reader, isClient bool) *transp
 	} else {
 		t.reader.dir = clientKeys
 		t.writer.dir = serverKeys
+	}
+	if debug {
+		t.debugTransport = true
 	}
 
 	return t

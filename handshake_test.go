@@ -96,8 +96,8 @@ func handshakePair(clientConf *ClientConfig, addr string, noise bool) (client *h
 
 	var trC, trS keyingTransport
 
-	trC = newTransport(a, rand.Reader, true)
-	trS = newTransport(b, rand.Reader, false)
+	trC = newTransport(a, rand.Reader, true, false)
+	trS = newTransport(b, rand.Reader, false, false)
 	if noise {
 		trC = addNoiseTransport(trC)
 		trS = addNoiseTransport(trS)
@@ -105,7 +105,7 @@ func handshakePair(clientConf *ClientConfig, addr string, noise bool) (client *h
 	clientConf.SetDefaults()
 
 	v := []byte("version")
-	client = newClientTransport(trC, v, v, clientConf, addr, a.RemoteAddr())
+	client = newClientTransport(trC, v, v, clientConf, addr, a.RemoteAddr(), false)
 
 	serverConf := &ServerConfig{}
 	serverConf.AddHostKey(testSigners["ecdsa"])
@@ -227,17 +227,17 @@ func TestForceFirstKex(t *testing.T) {
 
 	var trC, trS keyingTransport
 
-	trC = newTransport(a, rand.Reader, true)
+	trC = newTransport(a, rand.Reader, true, false)
 
 	// This is the disallowed packet:
 	trC.writePacket(Marshal(&serviceRequestMsg{serviceUserAuth}))
 
 	// Rest of the setup.
-	trS = newTransport(b, rand.Reader, false)
+	trS = newTransport(b, rand.Reader, false, false)
 	clientConf.SetDefaults()
 
 	v := []byte("version")
-	client := newClientTransport(trC, v, v, clientConf, "addr", a.RemoteAddr())
+	client := newClientTransport(trC, v, v, clientConf, "addr", a.RemoteAddr(), false)
 
 	serverConf := &ServerConfig{}
 	serverConf.AddHostKey(testSigners["ecdsa"])
@@ -590,7 +590,7 @@ func TestHandshakePendingPacketsWait(t *testing.T) {
 	clientConf.SetDefaults()
 
 	v := []byte("version")
-	client := newClientTransport(trC, v, v, clientConf, "addr", nil)
+	client := newClientTransport(trC, v, v, clientConf, "addr", nil, false)
 
 	serverConf := &ServerConfig{}
 	serverConf.AddHostKey(testSigners["ecdsa"])
@@ -690,7 +690,7 @@ func TestHandshakePendingPacketsError(t *testing.T) {
 	clientConf.SetDefaults()
 
 	v := []byte("version")
-	client := newClientTransport(trC, v, v, clientConf, "addr", nil)
+	client := newClientTransport(trC, v, v, clientConf, "addr", nil, false)
 
 	serverConf := &ServerConfig{}
 	serverConf.AddHostKey(testSigners["ecdsa"])
@@ -1170,15 +1170,15 @@ func TestStrictKEXMixed(t *testing.T) {
 
 	var trC, trS keyingTransport
 
-	trC = newTransport(a, rand.Reader, true)
-	trS = newTransport(b, rand.Reader, false)
+	trC = newTransport(a, rand.Reader, true, false)
+	trS = newTransport(b, rand.Reader, false, false)
 	trS = addNoiseTransport(trS)
 
 	clientConf := &ClientConfig{HostKeyCallback: func(hostname string, remote net.Addr, key PublicKey) error { return nil }}
 	clientConf.SetDefaults()
 
 	v := []byte("version")
-	client := newClientTransport(trC, v, v, clientConf, "addr", a.RemoteAddr())
+	client := newClientTransport(trC, v, v, clientConf, "addr", a.RemoteAddr(), false)
 
 	serverConf := &ServerConfig{}
 	serverConf.AddHostKey(testSigners["ecdsa"])

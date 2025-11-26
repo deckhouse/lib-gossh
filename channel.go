@@ -220,7 +220,7 @@ func (ch *channel) writePacket(packet []byte) error {
 }
 
 func (ch *channel) sendMessage(msg interface{}) error {
-	if debugMux {
+	if ch.mux.debugMux {
 		log.Printf("send(%d): %#v", ch.mux.chanList.offset, msg)
 	}
 

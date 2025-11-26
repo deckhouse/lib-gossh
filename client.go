@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"sync"
@@ -80,17 +81,50 @@ func NewClientConn(c net.Conn, addr string, config *ClientConfig) (Conn, <-chan 
 		sshConn: sshConn{conn: c, user: fullConf.User},
 	}
 
-	if err := conn.clientHandshake(addr, &fullConf); err != nil {
+	if err := conn.clientHandshake(addr, &fullConf, false); err != nil {
 		c.Close()
 		return nil, nil, nil, fmt.Errorf("ssh: handshake failed: %w", err)
 	}
-	conn.mux = newMux(conn.transport)
+	conn.mux = newMux(conn.transport, false)
 	return conn, conn.mux.incomingChannels, conn.mux.incomingRequests, nil
+}
+
+// NewClientConnWithDebug establishes an authenticated SSH connection using c
+// as the underlying transport.  The Request and NewChannel channels
+// must be serviced or the connection will hang.
+// All debug variables will be set to true
+func NewClientConnWithDebug(c net.Conn, addr string, config *ClientConfig, l *slog.Logger) (Conn, <-chan NewChannel, <-chan *Request, error) {
+	fullConf := *config
+	fullConf.SetDefaults()
+	if fullConf.HostKeyCallback == nil {
+		c.Close()
+		return nil, nil, nil, errors.New("ssh: must specify HostKeyCallback")
+	}
+
+	conn := &connection{
+		sshConn: sshConn{conn: c, user: fullConf.User},
+	}
+
+	if err := conn.clientHandshake(addr, &fullConf, true); err != nil {
+		c.Close()
+		return nil, nil, nil, fmt.Errorf("ssh: handshake failed: %w", err)
+	}
+	conn.mux = newMux(conn.transport, true)
+	conn.mux.logger = l
+	return conn, conn.mux.incomingChannels, conn.mux.incomingRequests, nil
+}
+
+func (c *connection) EnableDebug() {
+	c.debugMux = true
+	if c.mux.logger == nil {
+		c.mux.logger = slog.Default()
+	}
+	c.mux.EnableDebug()
 }
 
 // clientHandshake performs the client side key exchange. See RFC 4253 Section
 // 7.
-func (c *connection) clientHandshake(dialAddress string, config *ClientConfig) error {
+func (c *connection) clientHandshake(dialAddress string, config *ClientConfig, debug bool) error {
 	if config.ClientVersion != "" {
 		c.clientVersion = []byte(config.ClientVersion)
 	} else {
@@ -101,10 +135,17 @@ func (c *connection) clientHandshake(dialAddress string, config *ClientConfig) e
 	if err != nil {
 		return err
 	}
+	transport := newTransport(c.sshConn.conn, config.Rand, true /* is client */, debug)
+	if debug {
+		transport.logger = c.logger
+	}
 
 	c.transport = newClientTransport(
-		newTransport(c.sshConn.conn, config.Rand, true /* is client */),
-		c.clientVersion, c.serverVersion, config, dialAddress, c.sshConn.RemoteAddr())
+		transport,
+		c.clientVersion, c.serverVersion, config, dialAddress, c.sshConn.RemoteAddr(), debug)
+	if debug {
+		c.transport.logger = c.logger
+	}
 	if err := c.transport.waitSession(); err != nil {
 		return err
 	}
