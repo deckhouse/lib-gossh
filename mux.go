@@ -139,10 +139,57 @@ func (m *mux) EnableDebug() {
 	}
 }
 
+func msgString(offset uint32, msg any) string {
+	description := ""
+	t := ""
+	switch v := msg.(type) {
+	case globalRequestMsg:
+		t = "globalRequestMsg"
+		description = fmt.Sprintf("Type: %s WantReply: %v DataLen: %d", v.Type, v.WantReply, len(v.Data))
+	case globalRequestSuccessMsg:
+		t = "globalRequestSuccessMsg"
+		description = fmt.Sprintf("DataLen: %d", len(v.Data))
+	case globalRequestFailureMsg:
+		t = "globalRequestFailureMsg"
+		description = fmt.Sprintf("DataLen: %d", len(v.Data))
+	case pongMsg:
+		t = "pongMsg"
+		description = fmt.Sprintf("DataLen: %d", len(v.Data))
+	case channelOpenFailureMsg:
+		t = "channelOpenFailureMsg"
+		description = fmt.Sprintf(
+			"Reason: '%s' Message: '%s' Language: %s PeersID: %d",
+			v.Reason.String(),
+			v.Message,
+			v.Language,
+			v.PeersID,
+		)
+	case channelOpenMsg:
+		t = "channelOpenMsg"
+		description = fmt.Sprintf(
+			"ChanType: %s DataLen: %d PeersWindow: %d MaxPacketSize: %d PeersID: %d",
+			v.ChanType,
+			len(v.TypeSpecificData),
+			v.PeersWindow,
+			v.MaxPacketSize,
+			v.PeersID,
+		)
+	case channelRequestFailureMsg:
+		t = "channelRequestFailureMsg"
+		description = fmt.Sprintf("PeersID: %d", v.PeersID)
+	default:
+		t = "unknown"
+		description = fmt.Sprintf("RawMessage: %#v", msg)
+	}
+
+	return fmt.Sprintf("%s (offset %d): %s", t, offset, description)
+}
+
 func (m *mux) sendMessage(msg interface{}) error {
 	p := Marshal(msg)
-	if m.debugMux {
-		m.logger.Debug(fmt.Sprintf("send global(%d): %#v", m.chanList.offset, msg))
+	if m.debugEnabled() {
+		// do not use m.debug() msgString can huge for execute
+		m.logger.Debug(msgString(m.chanList.offset, msg))
 	}
 	return m.conn.writePacket(p)
 }
@@ -195,6 +242,8 @@ func (m *mux) Close() error {
 // loop runs the connection machine. It will process packets until an
 // error is encountered. To synchronize on loop exit, use mux.Wait.
 func (m *mux) loop() {
+	m.debug("Starting mux loop...")
+
 	var err error
 	for err == nil {
 		err = m.onePacket()
@@ -215,9 +264,7 @@ func (m *mux) loop() {
 	m.errCond.Broadcast()
 	m.errCond.L.Unlock()
 
-	if m.debugMux {
-		m.logger.Debug("loop exit", err)
-	}
+	m.debug("mux loop stopped: %v", err)
 }
 
 // onePacket reads and processes one packet.
@@ -227,7 +274,7 @@ func (m *mux) onePacket() error {
 		return err
 	}
 
-	if m.debugMux {
+	if m.debugEnabled() {
 		if packet[0] == msgChannelData || packet[0] == msgChannelExtendedData {
 			m.logger.Debug(fmt.Sprintf("decoding(%d): data packet - %d bytes", m.chanList.offset, len(packet)))
 		} else {
@@ -364,4 +411,16 @@ func (m *mux) handleUnknownChannelPacket(id uint32, packet []byte) error {
 	default:
 		return fmt.Errorf("ssh: invalid channel %d", id)
 	}
+}
+
+func (m *mux) debugEnabled() bool {
+	return m.debugMux && m.logger != nil
+}
+
+func (m *mux) debug(format string, args ...any) {
+	if !m.debugEnabled() {
+		return
+	}
+
+	m.logger.Debug(fmt.Sprintf(format, args...))
 }

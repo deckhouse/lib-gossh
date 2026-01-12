@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 )
 
@@ -220,8 +219,8 @@ func (ch *channel) writePacket(packet []byte) error {
 }
 
 func (ch *channel) sendMessage(msg interface{}) error {
-	if ch.mux.debugMux {
-		log.Printf("send(%d): %#v", ch.mux.chanList.offset, msg)
+	if ch.mux.debugEnabled() {
+		ch.mux.logger.Debug(msgString(ch.mux.chanList.offset, msg))
 	}
 
 	p := Marshal(msg)
