@@ -5,9 +5,14 @@
 package ssh
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -837,3 +842,161 @@ func TestMuxChannelWindowDeferredUpdates(t *testing.T) {
 // 		t.Error("transport debug switched on")
 // 	}
 // }
+
+func TestSendMessageLog(t *testing.T) {
+	type testMux struct {
+		mux     *mux
+		buf     *bytes.Buffer
+		writer  *bufio.Writer
+		cleanup func()
+	}
+
+	createMux := func() *testMux {
+		s, c, m := channelPair(t)
+
+		buf := bytes.NewBuffer(nil)
+		writer := bufio.NewWriter(buf)
+		handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+
+		logger := slog.New(handler)
+		logger.Enabled(context.TODO(), slog.LevelDebug)
+
+		m.debugMux = true
+		m.logger = logger
+
+		return &testMux{
+			mux:    m,
+			buf:    buf,
+			writer: writer,
+			cleanup: func() {
+				s.Close()
+				c.Close()
+				m.Close()
+			},
+		}
+	}
+
+	assertMsgInLog := func(t *testing.T, buf *bytes.Buffer, msgInLog string) {
+		content := buf.String()
+		if strings.Contains(content, msgInLog) {
+			return
+		}
+
+		t.Errorf("%s: got %q want %q", t.Name(), content, msgInLog)
+		t.FailNow()
+	}
+
+	send := func(t *testing.T, m *testMux, msg any) {
+		name := t.Name()
+
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("panic sendMessage %s: %v", name, r)
+				t.FailNow()
+			}
+		}()
+
+		err := m.mux.sendMessage(msg)
+		if err != nil {
+			t.Errorf("error sendMessage %s: %v", t.Name(), err)
+			t.FailNow()
+		}
+
+		_ = m.writer.Flush()
+	}
+
+	data := []byte("hello world")
+	dataLen := len(data)
+
+	type unknownMsg struct {
+		Filed           string
+		unexportedField string
+	}
+
+	tests := []struct {
+		name     string
+		msg      any
+		expected string
+	}{
+		{
+			name: "globalRequestMsg",
+			msg: globalRequestMsg{
+				Type:      "hello",
+				WantReply: false,
+				Data:      data,
+			},
+			expected: fmt.Sprintf("globalRequestMsg (offset 0): Type: hello WantReply: false DataLen: %d", dataLen),
+		},
+
+		{
+			name:     "globalRequestSuccessMsg",
+			msg:      globalRequestSuccessMsg{Data: data},
+			expected: fmt.Sprintf("globalRequestSuccessMsg (offset 0): DataLen: %d", dataLen),
+		},
+
+		{
+			name:     "globalRequestFailureMsg",
+			msg:      globalRequestFailureMsg{Data: data},
+			expected: fmt.Sprintf("globalRequestFailureMsg (offset 0): DataLen: %d", dataLen),
+		},
+
+		{
+			name:     "pongMsg",
+			msg:      pongMsg{Data: string(data)},
+			expected: fmt.Sprintf("pongMsg (offset 0): DataLen: %d", dataLen),
+		},
+
+		{
+			name: "channelOpenFailureMsg",
+			msg: channelOpenFailureMsg{
+				PeersID:  uint32(1),
+				Reason:   Prohibited,
+				Message:  string(data),
+				Language: "EN",
+			},
+			expected: fmt.Sprintf("channelOpenFailureMsg (offset 0): Reason: 'administratively prohibited' Message: '%s' Language: EN PeersID: 1", data),
+		},
+
+		{
+			name: "channelOpenMsg",
+			msg: channelOpenMsg{
+				ChanType:         "chan",
+				PeersID:          uint32(1),
+				PeersWindow:      uint32(2),
+				MaxPacketSize:    uint32(3),
+				TypeSpecificData: data,
+			},
+			expected: fmt.Sprintf("channelOpenMsg (offset 0): ChanType: chan DataLen: %d PeersWindow: 2 MaxPacketSize: 3 PeersID: 1", dataLen),
+		},
+
+		{
+			name: "channelRequestFailureMsg",
+			msg: channelRequestFailureMsg{
+				PeersID: uint32(1),
+			},
+			expected: "channelRequestFailureMsg (offset 0): PeersID: 1",
+		},
+
+		{
+			name: "unknown",
+			msg: unknownMsg{
+				Filed:           "hello",
+				unexportedField: "world",
+			},
+			expected: `unknown (offset 0): RawMessage: ssh.unknownMsg{Filed:\"hello\", unexportedField:\"world\"}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tstMux := createMux()
+			defer tstMux.cleanup()
+
+			send(t, tstMux, test.msg)
+
+			assertMsgInLog(t, tstMux.buf, test.expected)
+		})
+	}
+}

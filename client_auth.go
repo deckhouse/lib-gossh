@@ -21,12 +21,21 @@ const (
 	authSuccess
 )
 
+func (c *connection) debugClientAuthenticate(config *ClientConfig, format string, args ...any) {
+	format = format + fmt.Sprintf("Client authenticate for user '%s'", config.User)
+	c.debug(format, args...)
+}
+
 // clientAuthenticate authenticates with the remote server. See RFC 4252.
 func (c *connection) clientAuthenticate(config *ClientConfig) error {
+	c.debugClientAuthenticate(config, "Starting... Write auth packet")
 	// initiate user auth session
 	if err := c.transport.writePacket(Marshal(&serviceRequestMsg{serviceUserAuth})); err != nil {
 		return err
 	}
+
+	c.debugClientAuthenticate(config, "Reading auth packet")
+
 	packet, err := c.transport.readPacket()
 	if err != nil {
 		return err
@@ -82,6 +91,7 @@ func (c *connection) clientAuthenticate(config *ClientConfig) error {
 		}
 		if ok == authSuccess {
 			// success
+			c.debugClientAuthenticate(config, "Finished successfully")
 			return nil
 		} else if ok == authFailure {
 			if m := auth.method(); !slices.Contains(tried, m) {

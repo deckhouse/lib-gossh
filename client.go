@@ -130,6 +130,9 @@ func (c *connection) clientHandshake(dialAddress string, config *ClientConfig, d
 	} else {
 		c.clientVersion = []byte(packageVersion)
 	}
+
+	c.debug("Starting handshake... ExchangeVersions")
+
 	var err error
 	c.serverVersion, err = exchangeVersions(c.sshConn.conn, c.clientVersion)
 	if err != nil {
@@ -146,12 +149,18 @@ func (c *connection) clientHandshake(dialAddress string, config *ClientConfig, d
 	if debug {
 		c.transport.logger = l
 	}
+
+	c.debug("waitSession...")
+
 	if err := c.transport.waitSession(); err != nil {
 		return err
 	}
 
 	c.sessionID = c.transport.getSessionID()
 	c.algorithms = c.transport.getAlgorithms()
+
+	c.debug("Got session. Host key: '%s'", string(c.sessionID), c.algorithms.HostKey)
+
 	return c.clientAuthenticate(config)
 }
 
@@ -321,4 +330,23 @@ func BannerDisplayStderr() BannerCallback {
 
 		return err
 	}
+}
+
+func (c *connection) debugEnabled() bool {
+	return c.debugMux && c.logger != nil
+}
+
+func (c *connection) debug(format string, args ...any) {
+	if !c.debugEnabled() {
+		return
+	}
+
+	sessionID := ""
+	if len(c.sessionID) > 0 {
+		sessionID = fmt.Sprintf(" Session ID: %s", string(c.sessionID))
+	}
+
+	format = fmt.Sprintf("Connection. Client version: %s.%s ", string(c.clientVersion), sessionID) + format
+
+	c.logger.Debug(fmt.Sprintf(format, args...))
 }
